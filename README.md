@@ -1,55 +1,57 @@
 # Phaser Editor
 
-Electron + React + Phaser 3 sahne ve prefab editörü. Phaser Editor 2D `.scene` / `.prefab` JSON formatıyla uyumludur; sahneleri TypeScript’e derleyebilirsiniz — oyunda resmi Phaser Editor 2D gerekmez.
+**English** | [Türkçe](README.tr.md)
+
+Electron + React + Phaser 3 scene and prefab editor. It reads and writes Phaser Editor 2D `.scene` / `.prefab` JSON and can compile scenes to TypeScript, so the game runtime does not need official Phaser Editor 2D.
 
 > Custom editor. Not the official Phaser Editor product.
 
-## Özellikler
+## Features
 
-- Proje klasörü açma, sahne sekmeleri, kaydet / geri al / kapat uyarısı
-- Hierarchy: Shift çoklu seçim, Layer oluştur / seçilenleri grupla
-- Sürüklenebilir dock pencereler (Hierarchy, Project, Prefabs, Inspector, Assets, Animation)
-- Unity benzeri Inspector (eksen scrub, Arcade Body, Hit Area, Phaser 4 filter bileşenleri)
-- 2D transform gizmo: El (pan), Position, Rotate, Scale — `Q` `W` `E` `R`
-- Sprite Animation: `*-anims.json` (`generateFrameNames`) dopesheet, clip düzenleme, Ctrl+S
-- Prefab: oluştur, instance, override, çift tıklayınca kamerayı odakla
-- Derle (TS): `proje/src/scenes` ve `proje/src/prefabs`
+- Open a project folder, scene tabs, save / revert / unsaved close warning
+- Hierarchy: Shift multi-select, create Layer / group selection into a Layer
+- Draggable dock windows (Hierarchy, Project, Prefabs, Inspector, Assets, Animation)
+- Unity-like Inspector (axis scrub, Arcade Body, Hit Area, Phaser 4 filter components)
+- 2D transform gizmo: Hand (pan), Position, Rotate, Scale — `Q` `W` `E` `R`
+- Sprite Animation: `*-anims.json` (`generateFrameNames`) dopesheet, clip editing, Ctrl+S
+- Prefabs: create, instance, overrides, double-click to focus the camera
+- Compile (TS): writes to `project/src/scenes` and `project/src/prefabs`
 
-## Gereksinimler
+## Requirements
 
 - Node.js 20+
 - npm
 - macOS / Windows / Linux (Electron)
 
-## Çalıştırma
+## Run
 
-İki süreç gerekir: Vite dev server ve Electron penceresi.
+You need two processes: the Vite dev server and the Electron window.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Başka bir terminalde:
+In another terminal:
 
 ```bash
 npm run electron:dev
 ```
 
-Vite: `http://localhost:5173`. Tam dosya okuma/yazma yalnızca Electron içinde çalışır.
+Vite: `http://localhost:5173`. Full file read/write only works inside Electron.
 
-### Üretim
+### Production
 
 ```bash
 npm run build    # dist/ + dist-electron/
-npm run dist     # electron-builder paketi (release/)
+npm run dist     # electron-builder package (release/)
 npm test
 npm run typecheck
 ```
 
-## Örnek oyun
+## Sample game
 
-`sample-game/` editörün ürettiği kodu kullanan küçük bir Phaser 3 projesidir.
+`sample-game/` is a small Phaser 3 project that consumes code produced by the editor.
 
 ```bash
 cd sample-game
@@ -57,38 +59,38 @@ npm install
 npm run dev
 ```
 
-Editörde `sample-game` klasörünü proje olarak açıp `Level.scene` / `Dragon.prefab` düzenleyebilir, **Derle (TS)** ile `sample-game/src/` altına yazıp oyunu yenileyebilirsiniz.
+Open the `sample-game` folder as a project, edit `Level.scene` / `Dragon.prefab`, then **Compile (TS)** to write into `sample-game/src/` and refresh the game.
 
-## Kısayollar
+## Shortcuts
 
-| Tuş | İşlev |
+| Key | Action |
 | --- | --- |
-| `Q` `W` `E` `R` | El / Position / Rotate / Scale |
-| `Ctrl/Cmd+S` | Sahne + kirli `*-anims.json` kaydet |
+| `Q` `W` `E` `R` | Hand / Position / Rotate / Scale |
+| `Ctrl/Cmd+S` | Save scene + dirty `*-anims.json` |
 | `Ctrl/Cmd+Z` / `Shift+Z` / `Y` | Undo / Redo |
 
-## Klasörler
+## Layout
 
 ```
-electron/          ana süreç + preload
+electron/          main process + preload
 src/editor/
-  model/           Phaser Editor 2D uyumlu tipler, anims, gizmo matematiği
-  serialization/   .scene / .prefab oku-yaz
-  store/           Zustand (proje, sahne, seçim, undo)
-  compiler/        TS kod üretimi
-  phaser/          canvas (EditorScene, gizmo, texture)
-  layout/          dock yerleşimi
+  model/           Phaser Editor 2D types, anims, gizmo math
+  serialization/   .scene / .prefab read-write
+  store/           Zustand (project, scene, selection, undo)
+  compiler/        TypeScript codegen
+  phaser/          canvas (EditorScene, gizmo, textures)
+  layout/          dock layout
   components/      React UI
-sample-game/       derlenen kodu tüketen örnek oyun
+sample-game/       sample game that uses compiled output
 ```
 
 ## Sprite Animation
 
-Clip’ler sahnede değil, `generateFrameNames` alanlı `*-anims.json` dosyalarındadır (`key`, `prefix`, `start`, `end`, `zeroPad`, `frameRate`, `repeat`). Prefab `label` / `texture.key` / dosya adı `atlasKey` veya `previewKey` ile eşleşince Animation penceresi açılır. `anims[]` olmayan dosyalar yok sayılır.
+Clips live in `*-anims.json` files with `generateFrameNames` fields (`key`, `prefix`, `start`, `end`, `zeroPad`, `frameRate`, `repeat`), not on the scene. The Animation window opens when a prefab `label` / `texture.key` / file name matches `atlasKey` or `previewKey`. Files without `anims[]` are ignored.
 
-## Sınırlamalar
+## Limitations
 
-- Prefab derlemesi tek kök objeyi hedefler; iç içe container children her durumda derlenmeyebilir
-- Editör texture’ları base64 ile yükler; oyunda ilgili anahtarın yüklenmiş olması gerekir
-- Desteklenen tipler: Image, Sprite, Text, Container, Layer, Rectangle, Arc, Triangle, Line
-- Resmi Phaser Editor v5 MCP / bulut ürünü değildir
+- Prefab compile targets a single root object; nested container children may not always compile
+- The editor loads textures as base64; the game still needs those keys loaded
+- Supported types: Image, Sprite, Text, Container, Layer, Rectangle, Arc, Triangle, Line
+- This is not official Phaser Editor v5 MCP / cloud
