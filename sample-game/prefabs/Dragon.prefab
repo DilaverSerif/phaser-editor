@@ -1,0 +1,39 @@
+{
+  "id": "11111111-1111-1111-1111-111111111111",
+  "sceneType": "PREFAB",
+  "settings": {
+    "exportClass": true,
+    "autoImport": true,
+    "preloadMethodName": "",
+    "preloadPackFiles": [],
+    "createMethodName": "",
+    "compilerOutputLanguage": "TYPE_SCRIPT",
+    "borderWidth": 1280,
+    "borderHeight": 720
+  },
+  "displayList": [
+    {
+      "id": "dragon-root",
+      "type": "Image",
+      "label": "dragon",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "angle": 0,
+      "alpha": 1,
+      "originX": 0.5,
+      "originY": 0.5,
+      "visible": true,
+      "texture": "dragon"
+    }
+  ],
+  "plainObjects": [],
+  "meta": {
+    "app": "Phaser Editor (custom)",
+    "url": "https://phasereditor2d.com",
+    "contentType": "phasereditor2d.core.scene.SceneContentType",
+    "version": 3
+  },
+  "prefabProperties": []
+}
