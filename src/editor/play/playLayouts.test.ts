@@ -29,4 +29,12 @@ describe("containViewport", () => {
       scale: 400 / 852,
     });
   });
+
+  it("kucuk kutuda 0 doner", () => {
+    expect(containViewport(393, 852, 4, 400)).toEqual({
+      width: 0,
+      height: 0,
+      scale: 0,
+    });
+  });
 });

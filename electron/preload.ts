@@ -25,6 +25,14 @@ const api = {
       { ok: true; url: string } | { error: string }
     >,
   stopPlay: () => ipcRenderer.invoke("play:stop") as Promise<{ ok: true }>,
+  clearPlaySiteData: () =>
+    ipcRenderer.invoke("play:clearSiteData") as Promise<
+      { ok: true } | { error: string }
+    >,
+  collectPlayStats: (webContentsId: number) =>
+    ipcRenderer.invoke("play:collectStats", webContentsId),
+  playGuestPreloadUrl: () =>
+    ipcRenderer.invoke("play:guestPreloadUrl") as Promise<string>,
 };
 
 contextBridge.exposeInMainWorld("editor", api);

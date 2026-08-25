@@ -38,4 +38,6 @@ const config: Phaser.Types.Core.GameConfig = {
     : {}),
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+(window as Window & { __PHASER_GAME__?: Phaser.Game }).__PHASER_GAME__ = game;
+document.documentElement.setAttribute("data-phaser-editor-game", "1");

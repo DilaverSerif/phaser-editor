@@ -1,6 +1,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  devScriptUsesVite,
+  PLAY_HOOK_CONFIG_SOURCE,
+  PLAY_HOOK_DIR,
+  PLAY_HOOK_FILE,
+} from "../src/editor/play/playHookConfig";
 
 export const PLAY_HOST = "127.0.0.1";
 export const PLAY_PORT = 5180;
@@ -77,11 +83,13 @@ function runNpm(args: string[], cwd: string, timeoutMs: number) {
   });
 }
 
-async function ensureProject(projectPath: string): Promise<string | null> {
+async function ensureProject(
+  projectPath: string
+): Promise<{ error: string } | { devScript: string }> {
   const resolved = path.resolve(projectPath);
   const pkgPath = path.join(resolved, "package.json");
   if (!fs.existsSync(pkgPath)) {
-    return "Proje klasöründe package.json yok.";
+    return { error: "Proje klasöründe package.json yok." };
   }
   let pkg: { scripts?: { dev?: string } };
   try {
@@ -89,26 +97,45 @@ async function ensureProject(projectPath: string): Promise<string | null> {
       scripts?: { dev?: string };
     };
   } catch {
-    return "package.json okunamadı.";
+    return { error: "package.json okunamadı." };
   }
   if (!pkg.scripts?.dev) {
-    return "package.json içinde npm run dev scripti yok.";
+    return { error: "package.json içinde npm run dev scripti yok." };
   }
   const modules = path.join(resolved, "node_modules");
   if (!fs.existsSync(modules)) {
     const install = await runNpm(["install"], resolved, INSTALL_TIMEOUT_MS);
     if (install.code !== 0) {
-      return `npm install başarısız:\n${install.out.slice(-800)}`;
+      return { error: `npm install başarısız:\n${install.out.slice(-800)}` };
     }
   }
-  return null;
+  return { devScript: pkg.scripts.dev };
 }
 
-function startVite(projectPath: string): Promise<PlayOk | PlayErr> {
+/**
+ * Istatistik penceresinin oyunu bulabilmesi icin Phaser'i saran gecici Vite
+ * ayarini yazar. Yazamazsak null doner ve Play kancasiz calisir.
+ */
+function writeHookConfig(projectPath: string): string | null {
+  try {
+    const dir = path.join(projectPath, ...PLAY_HOOK_DIR.split("/"));
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, PLAY_HOOK_FILE);
+    fs.writeFileSync(file, PLAY_HOOK_CONFIG_SOURCE, "utf-8");
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+function startVite(projectPath: string, hookConfig: string | null): Promise<PlayOk | PlayErr> {
   return new Promise((resolve) => {
+    const args = ["run", "dev", "--"];
+    if (hookConfig) args.push("--config", hookConfig);
+    args.push("--host", PLAY_HOST, "--port", String(PLAY_PORT), "--strictPort");
     const child = spawn(
       npmCommand(),
-      ["run", "dev", "--", "--host", PLAY_HOST, "--port", String(PLAY_PORT), "--strictPort"],
+      args,
       {
         cwd: projectPath,
         env: process.env,
@@ -177,9 +204,15 @@ export async function startPlay(projectPath: string): Promise<PlayOk | PlayErr> 
   if (playChild) stopPlay();
 
   try {
-    const problem = await ensureProject(resolved);
-    if (problem) return { error: problem };
-    return await startVite(resolved);
+    const project = await ensureProject(resolved);
+    if ("error" in project) return { error: project.error };
+    const hookConfig = devScriptUsesVite(project.devScript) ? writeHookConfig(resolved) : null;
+    if (hookConfig) {
+      const hooked = await startVite(resolved, hookConfig);
+      if (!("error" in hooked)) return hooked;
+      // Uretilen ayar projeyle uyusmadiysa Play'i kancasiz baslatmayi deniyoruz.
+    }
+    return await startVite(resolved, null);
   } catch (err) {
     stopPlay();
     return { error: err instanceof Error ? err.message : String(err) };

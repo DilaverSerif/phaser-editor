@@ -51,3 +51,28 @@ export async function stopPlay() {
     usePlaySession.getState().reset();
   }
 }
+
+export async function clearPlaySiteData() {
+  const api = editorApi();
+  if (!api?.clearPlaySiteData) {
+    return { error: "Play yalnızca Electron içinde çalışır." };
+  }
+  const result = await api.clearPlaySiteData();
+  if ("error" in result) return result;
+  const play = usePlaySession.getState();
+  if (play.status === "running" && play.url) play.bumpReload();
+  return result;
+}
+
+export async function collectPlayStats(webContentsId: number) {
+  const api = editorApi();
+  if (!api?.collectPlayStats) {
+    return { found: false, error: "Play yalnızca Electron içinde çalışır." };
+  }
+  return api.collectPlayStats(webContentsId);
+}
+
+export async function playGuestPreloadUrl() {
+  const url = await editorApi()?.playGuestPreloadUrl();
+  return url ?? "";
+}

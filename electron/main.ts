@@ -1,8 +1,25 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session, webContents } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
-import { startPlay, stopPlay } from "./playVite";
+import { COLLECT_PLAY_STATS } from "../src/editor/play/playStats";
+import { PLAY_PARTITION } from "./playPartition";
+import { PLAY_HOST, PLAY_PORT, startPlay, stopPlay } from "./playVite";
+
+function isPlayGuestUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === PLAY_HOST && parsed.port === String(PLAY_PORT);
+  } catch {
+    return false;
+  }
+}
+
+function copyPlayGuestPreload() {
+  const dest = path.join(__dirname, "playGuestPreload.cjs");
+  const src = path.join(__dirname, "../electron/playGuestPreload.cjs");
+  if (fs.existsSync(src)) fs.copyFileSync(src, dest);
+}
 
 app.commandLine.appendSwitch("disable-background-timer-throttling");
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
@@ -68,6 +85,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  copyPlayGuestPreload();
   createWindow();
 
   ipcMain.handle("dialog:openProject", async () => {
@@ -149,6 +167,44 @@ app.whenReady().then(() => {
   ipcMain.handle("play:stop", async () => {
     stopPlay();
     return { ok: true };
+  });
+
+  ipcMain.handle("play:clearSiteData", async () => {
+    try {
+      const playSession = session.fromPartition(PLAY_PARTITION);
+      await playSession.clearCache();
+      await playSession.clearStorageData();
+      return { ok: true };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcMain.handle("play:guestPreloadUrl", () => {
+    copyPlayGuestPreload();
+    const dest = path.join(__dirname, "playGuestPreload.cjs");
+    if (!fs.existsSync(dest)) return "";
+    return pathToFileURL(dest).href;
+  });
+
+  ipcMain.handle("play:collectStats", async (_event, webContentsId: number) => {
+    if (typeof webContentsId !== "number") {
+      return { found: false, error: "webview id yok" };
+    }
+    const guest = webContents.fromId(webContentsId);
+    if (!guest || guest.isDestroyed()) {
+      return { found: false, error: "guest yok" };
+    }
+    if (!isPlayGuestUrl(guest.getURL())) {
+      return { found: false, error: "Play guest değil" };
+    }
+    try {
+      return await guest.executeJavaScriptInIsolatedWorld(0, [
+        { code: COLLECT_PLAY_STATS },
+      ]);
+    } catch (err) {
+      return { found: false, error: err instanceof Error ? err.message : String(err) };
+    }
   });
 });
 
