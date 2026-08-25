@@ -1,6 +1,9 @@
 import Phaser from "phaser";
 import Level from "./scenes/Level";
 
+const editorPlay = new URLSearchParams(window.location.search).has("editorPlay");
+if (editorPlay) document.documentElement.classList.add("editor-play");
+
 // Boot sahnesi: editorun urettigi prefab'in kullandigi "dragon"
 // texture'sini olusturur, ardindan Level sahnesini baslatir.
 class Boot extends Phaser.Scene {
@@ -24,6 +27,15 @@ const config: Phaser.Types.Core.GameConfig = {
   parent: "game",
   backgroundColor: "#202030",
   scene: [Boot, Level],
+  ...(editorPlay
+    ? {
+        render: { powerPreference: "high-performance" as const },
+        scale: {
+          mode: Phaser.Scale.FIT,
+          autoCenter: Phaser.Scale.CENTER_BOTH,
+        },
+      }
+    : {}),
 };
 
 new Phaser.Game(config);

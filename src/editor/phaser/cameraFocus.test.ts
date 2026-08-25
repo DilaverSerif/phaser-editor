@@ -4,6 +4,7 @@ import {
   FOCUS_MIN_ZOOM,
   focusCenter,
   focusZoomForBounds,
+  unionBounds,
 } from "./cameraFocus";
 
 describe("focusZoomForBounds", () => {
@@ -35,5 +36,20 @@ describe("focusCenter", () => {
       x: 120,
       y: 60,
     });
+  });
+});
+
+describe("unionBounds", () => {
+  it("bos listede null doner", () => {
+    expect(unionBounds([])).toBeNull();
+  });
+
+  it("birden fazla dikdortgeni birlestirir", () => {
+    expect(
+      unionBounds([
+        { x: 0, y: 0, width: 10, height: 10 },
+        { x: 20, y: 5, width: 10, height: 20 },
+      ])
+    ).toEqual({ x: 0, y: 0, width: 30, height: 25 });
   });
 });

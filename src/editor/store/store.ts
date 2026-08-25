@@ -36,6 +36,11 @@ import {
 import type { TransformTool } from "../model/transformGizmo";
 import { getActiveEditorScene } from "../phaser/editorController";
 import {
+  applyOverridesToRoot,
+  hasPrefabOverrides,
+  revertInstanceToPrefab,
+} from "../model/prefabInstance";
+import {
   cloneSpriteAnims,
   matchSpriteAnims,
   parseSpriteAnimsJson,
@@ -132,6 +137,8 @@ interface EditorState {
 
   createPrefabFromSelection: (name: string) => Promise<void>;
   instantiatePrefab: (prefabId: string, x: number, y: number) => void;
+  applyPrefabInstance: (id: string) => Promise<void>;
+  revertPrefabInstance: (id: string) => void;
 
   addAsset: (key: string, path: string) => void;
   setAssetBase64: (key: string, base64: string) => void;
@@ -900,6 +907,77 @@ export const useEditorStore = create<EditorState>()(
           });
         }
       });
+    },
+
+    applyPrefabInstance: async (id) => {
+      const active = getActiveScene(get());
+      if (!active) return;
+      const instance = findNode(active.scene, id);
+      if (!instance?.prefabId || !hasPrefabOverrides(instance)) return;
+      const entry = get().prefabIndex.find((item) => item.id === instance.prefabId);
+      const root = entry?.scene?.displayList[0];
+      if (!entry?.scene || !root) return;
+
+      const instanceSnap = snapshot(active.scene);
+      const opened = get().scenes.find((item) => item.fileName === entry.fileName);
+      const prefabSnap = opened ? snapshot(opened.scene) : snapshot(entry.scene);
+      const nextRoot = applyOverridesToRoot(root, instance);
+      const nextInstance = revertInstanceToPrefab(instance);
+
+      set((s) => {
+        const sc = s.scenes.find((item) => item.fileName === s.activeFileName);
+        const inst = sc ? findNode(sc.scene, id) : null;
+        const indexEntry = s.prefabIndex.find((item) => item.id === instance.prefabId);
+        if (!sc || !inst || !indexEntry?.scene?.displayList[0]) return;
+        pushHistory(sc, instanceSnap);
+        Object.assign(inst, nextInstance);
+        for (const key of Object.keys(inst)) {
+          if (!(key in nextInstance)) delete inst[key];
+        }
+        markSceneDirty(sc);
+        Object.assign(indexEntry.scene.displayList[0], nextRoot);
+        const prefabScene = s.scenes.find((item) => item.fileName === entry.fileName);
+        if (prefabScene?.scene.displayList[0]) {
+          pushHistory(prefabScene, prefabSnap);
+          Object.assign(prefabScene.scene.displayList[0], nextRoot);
+          markSceneDirty(prefabScene);
+        }
+      });
+      getActiveEditorScene()?.refreshPreview();
+
+      const api = (window as any).editor as
+        | import("../../../electron/preload").EditorApi
+        | undefined;
+      if (opened) {
+        await get().saveScene(entry.fileName);
+        return;
+      }
+      const latest = get().prefabIndex.find((item) => item.id === instance.prefabId);
+      if (api && latest?.filePath && latest.scene) {
+        await api.writeFile(latest.filePath, serializeScene(latest.scene));
+        await get().refreshProjectFiles();
+      }
+    },
+
+    revertPrefabInstance: (id) => {
+      const active = getActiveScene(get());
+      if (!active) return;
+      const instance = findNode(active.scene, id);
+      if (!instance?.prefabId || !hasPrefabOverrides(instance)) return;
+      const snap = snapshot(active.scene);
+      const next = revertInstanceToPrefab(instance);
+      set((s) => {
+        const sc = s.scenes.find((item) => item.fileName === s.activeFileName);
+        const inst = sc ? findNode(sc.scene, id) : null;
+        if (!sc || !inst) return;
+        pushHistory(sc, snap);
+        Object.assign(inst, next);
+        for (const key of Object.keys(inst)) {
+          if (!(key in next)) delete inst[key];
+        }
+        markSceneDirty(sc);
+      });
+      getActiveEditorScene()?.refreshPreview();
     },
 
     instantiatePrefab: (prefabId, x, y) => {

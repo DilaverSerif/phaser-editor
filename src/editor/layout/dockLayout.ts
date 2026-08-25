@@ -4,7 +4,8 @@ export type PanelId =
   | "prefab"
   | "inspector"
   | "assets"
-  | "animation";
+  | "animation"
+  | "play";
 
 export interface DockFrame {
   id: string;
@@ -24,6 +25,7 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   inspector: "Inspector",
   assets: "Assets",
   animation: "Animation",
+  play: "Play",
 };
 
 export const ALL_PANEL_IDS: PanelId[] = [
@@ -33,6 +35,7 @@ export const ALL_PANEL_IDS: PanelId[] = [
   "inspector",
   "assets",
   "animation",
+  "play",
 ];
 
 export const DOCK_STORAGE_KEY = "phaser-editor.dock-v1";
@@ -45,6 +48,7 @@ export function defaultFrames(): DockFrame[] {
     frame("f-inspector", 1072, 12, 316, 802, "inspector"),
     frame("f-assets", 676, 384, 384, 430, "assets"),
     frame("f-animation", 344, 12, 720, 320, "animation"),
+    frame("f-play", 360, 200, 760, 520, "play"),
   ];
 }
 
@@ -83,6 +87,75 @@ export function insertIndexFromX(
     if (clientX < mids[i]) return i;
   }
   return mids.length;
+}
+
+export interface TabBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export interface StripRect {
+  frameId: string;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  tabMids: number[];
+  tabBoxes: TabBox[];
+}
+
+function pointInStrip(strip: StripRect, clientX: number, clientY: number) {
+  return (
+    clientX >= strip.left &&
+    clientX <= strip.right &&
+    clientY >= strip.top &&
+    clientY <= strip.bottom
+  );
+}
+
+function boxesOverlap(a: TabBox, b: TabBox) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+export function hitTabStrip(
+  strips: StripRect[],
+  clientX: number,
+  clientY: number,
+  ignoreFrameId?: string
+): { frameId: string; index: number } | null {
+  const others = strips.filter((strip) => strip.frameId !== ignoreFrameId);
+  const self = ignoreFrameId
+    ? strips.filter((strip) => strip.frameId === ignoreFrameId)
+    : [];
+  for (const strip of [...others, ...self]) {
+    if (pointInStrip(strip, clientX, clientY)) {
+      return { frameId: strip.frameId, index: insertIndexFromX(strip.tabMids, clientX) };
+    }
+  }
+  return null;
+}
+
+/** Sekme isim kutusu hedef seridin uzerine binince birlestir. Serit temasi yetmez. */
+export function tabBoxHitsStrip(
+  boxes: TabBox[],
+  strips: StripRect[]
+): { frameId: string; index: number } | null {
+  for (const strip of strips) {
+    const target: TabBox = {
+      left: strip.left,
+      top: strip.top,
+      right: strip.right,
+      bottom: strip.bottom,
+    };
+    for (const box of boxes) {
+      if (!boxesOverlap(box, target)) continue;
+      const x = (box.left + box.right) / 2;
+      return { frameId: strip.frameId, index: insertIndexFromX(strip.tabMids, x) };
+    }
+  }
+  return null;
 }
 
 export function normalizeFrames(input: DockFrame[]): DockFrame[] {
@@ -155,6 +228,28 @@ export function moveTab(
         return { ...frame, tabs, active: panelId, minimized: false };
       }
       return frame;
+    })
+    .filter((frame) => frame.tabs.length > 0);
+}
+
+export function mergeFrame(
+  frames: DockFrame[],
+  fromFrameId: string,
+  toFrameId: string,
+  toIndex: number
+): DockFrame[] {
+  if (fromFrameId === toFrameId) return frames;
+  const from = frames.find((frame) => frame.id === fromFrameId);
+  if (!from) return frames;
+  const moving = from.tabs;
+  return frames
+    .map((frame) => {
+      if (frame.id === fromFrameId) return { ...frame, tabs: [] as PanelId[] };
+      if (frame.id !== toFrameId) return frame;
+      const tabs = frame.tabs.slice();
+      const dest = Math.max(0, Math.min(toIndex, tabs.length));
+      tabs.splice(dest, 0, ...moving);
+      return { ...frame, tabs, active: from.active, minimized: false };
     })
     .filter((frame) => frame.tabs.length > 0);
 }

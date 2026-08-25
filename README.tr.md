@@ -2,7 +2,7 @@
 
 [English](README.md) | **Türkçe**
 
-Electron + React + Phaser 3 sahne ve prefab editörü. Phaser Editor 2D `.scene` / `.prefab` JSON formatıyla uyumludur; sahneleri TypeScript’e derleyebilirsiniz — oyunda resmi Phaser Editor 2D gerekmez.
+Electron + React + Phaser 4 sahne ve prefab editörü. Phaser Editor 2D `.scene` / `.prefab` JSON formatıyla uyumludur; sahneleri TypeScript’e derleyebilirsiniz — oyunda resmi Phaser Editor 2D gerekmez.
 
 > Özel editör. Resmi Phaser Editor ürünü değildir.
 
@@ -38,20 +38,23 @@ Başka bir terminalde:
 npm run electron:dev
 ```
 
+macOS Gatekeeper `Electron.app` dosyasını Çöp’e taşıyabilir. `npm run fix:electron` çalıştırın (`dev` / `electron:dev` öncesi de çalışır). Tekrar olursa: Sistem Ayarları → Gizlilik ve Güvenlik → Yine de Aç.
+
 Vite: `http://localhost:5173`. Tam dosya okuma/yazma yalnızca Electron içinde çalışır.
 
 ### Üretim
 
 ```bash
-npm run build    # dist/ + dist-electron/
-npm run dist     # electron-builder paketi (release/)
+./scripts/build-editor.sh   # typecheck + vite + electron-builder → release/
+npm run build               # yalnız dist/ + dist-electron/
+npm run dist                # .sh ile aynı (install/fix yok)
 npm test
 npm run typecheck
 ```
 
 ## Örnek oyun
 
-`sample-game/` editörün ürettiği kodu kullanan küçük bir Phaser 3 projesidir.
+`sample-game/` editörün ürettiği kodu kullanan küçük bir Phaser 4 projesidir.
 
 ```bash
 cd sample-game

@@ -29,3 +29,20 @@ export function focusCenter(bounds: {
     y: bounds.y + bounds.height / 2,
   };
 }
+
+export function unionBounds(
+  rects: { x: number; y: number; width: number; height: number }[]
+): { x: number; y: number; width: number; height: number } | null {
+  if (rects.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const rect of rects) {
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, rect.x + rect.width);
+    maxY = Math.max(maxY, rect.y + rect.height);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}

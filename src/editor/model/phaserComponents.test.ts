@@ -56,7 +56,16 @@ describe("phaser components", () => {
     const glow = createFilter("Glow");
     const lines = emitFilters("hero", node({ filters: [glow] }));
     expect(lines[0]).toBe("hero.enableFilters();");
-    expect(lines[1]).toContain("hero.filters.external.addGlow(");
-    expect(lines[1]).toContain("color: 0xffffff");
+    expect(lines[1]).toBe("hero.filters.external.addGlow(0xffffff, 4, 0, 1, false);");
+  });
+
+  it("ColorMatrix filter P4 colorMatrix setter'lari uretir", () => {
+    const matrix = createFilter("ColorMatrix");
+    matrix.brightness = 0.4;
+    matrix.saturate = 0.2;
+    const lines = emitFilters("hero", node({ filters: [matrix] }));
+    expect(lines).toContain("    const f = hero.filters.external.addColorMatrix();");
+    expect(lines).toContain("    f.colorMatrix.brightness(0.4);");
+    expect(lines).toContain("    f.colorMatrix.saturate(0.2, true);");
   });
 });

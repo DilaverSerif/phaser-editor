@@ -1,10 +1,16 @@
 import { TRANSFORM_HOTKEYS } from "./model/transformGizmo";
 import { useEditorStore, hasDirtyScenes } from "./store/store";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Toolbar } from "./components/Toolbar";
 import { CanvasView } from "./components/CanvasView";
 import { DockWorkspace } from "./components/DockWorkspace";
 import { SceneTabBar } from "./components/SceneTabBar";
+import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
+import type { AppCloseKind, EditorApi } from "../../electron/preload";
+
+function editorApi(): EditorApi | undefined {
+  return (window as unknown as { editor?: EditorApi }).editor;
+}
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -14,6 +20,8 @@ function isTypingTarget(target: EventTarget | null) {
 
 export function App() {
   const projectPath = useEditorStore((s) => s.projectPath);
+  const saveAllDirtyScenes = useEditorStore((s) => s.saveAllDirtyScenes);
+  const [pendingClose, setPendingClose] = useState<AppCloseKind | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -64,26 +72,70 @@ export function App() {
         useEditorStore.getState().redo();
       }
     };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  useEffect(() => {
+    const api = editorApi();
+    if (api?.onCloseRequest) {
+      return api.onCloseRequest((kind) => {
+        if (!hasDirtyScenes(useEditorStore.getState())) {
+          api.allowClose(kind);
+          return;
+        }
+        setPendingClose((current) =>
+          current === "quit" || kind === "quit" ? "quit" : kind
+        );
+      });
+    }
     const onUnload = (event: BeforeUnloadEvent) => {
       if (!hasDirtyScenes(useEditorStore.getState())) return;
       event.preventDefault();
       event.returnValue = "";
     };
-    window.addEventListener("keydown", onKey);
     window.addEventListener("beforeunload", onUnload);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("beforeunload", onUnload);
-    };
+    return () => window.removeEventListener("beforeunload", onUnload);
   }, []);
+
+  const finishClose = (kind: AppCloseKind) => {
+    setPendingClose(null);
+    editorApi()?.allowClose(kind);
+  };
+
+  const cancelClose = () => {
+    setPendingClose(null);
+    editorApi()?.cancelClose();
+  };
+
+  const closeDialog = pendingClose ? (
+    <UnsavedChangesDialog
+      message="Kaydedilmemiş değişiklikler var. Çıkmadan önce kaydedilsin mi?"
+      onSave={async () => {
+        try {
+          await saveAllDirtyScenes();
+          finishClose(pendingClose);
+        } catch (error) {
+          console.error("[close] save failed", error);
+        }
+      }}
+      onDiscard={() => finishClose(pendingClose)}
+      onCancel={cancelClose}
+    />
+  ) : null;
 
   if (!projectPath) {
     return (
-      <div className="welcome">
-        <h1>Phaser Editor</h1>
-        <p>Phaser Editor 2D uyumlu sahne + prefab editoru</p>
-        <OpenButton />
-      </div>
+      <>
+        <div className="welcome">
+          <h1>Phaser Editor</h1>
+          <p>Phaser Editor 2D uyumlu sahne + prefab editoru</p>
+          <OpenButton />
+        </div>
+        {closeDialog}
+      </>
     );
   }
 
@@ -95,6 +147,7 @@ export function App() {
         <CanvasView />
         <DockWorkspace />
       </div>
+      {closeDialog}
     </div>
   );
 }

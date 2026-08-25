@@ -18,6 +18,7 @@ import {
   prefabPropertyValue,
   prefabUserProperties,
 } from "./inspectorModel";
+import { hasPrefabOverrides } from "../model/prefabInstance";
 import { ArcadeSection, FilterSection, HitAreaSection } from "./InspectorComponents";
 
 function foldIcon(open: boolean) {
@@ -252,6 +253,8 @@ export function Inspector() {
   const beginInteraction = useEditorStore((s) => s.beginInteraction);
   const removeNode = useEditorStore((s) => s.removeNode);
   const createPrefab = useEditorStore((s) => s.createPrefabFromSelection);
+  const applyPrefabInstance = useEditorStore((s) => s.applyPrefabInstance);
+  const revertPrefabInstance = useEditorStore((s) => s.revertPrefabInstance);
   const openSceneFile = useEditorStore((s) => s.openSceneFile);
   const addPhaserComponent = useEditorStore((s) => s.addPhaserComponent);
   const removePhaserComponent = useEditorStore((s) => s.removePhaserComponent);
@@ -358,6 +361,24 @@ export function Inspector() {
               Open
             </button>
           )}
+          <button
+            type="button"
+            className="u-prefab-open"
+            disabled={!prefabEntry || !hasPrefabOverrides(node)}
+            title="Sahne üzerindeki değişiklikleri prefab dosyasına yaz"
+            onClick={() => void applyPrefabInstance(node.id)}
+          >
+            Prefab'a uygula
+          </button>
+          <button
+            type="button"
+            className="u-prefab-open"
+            disabled={!hasPrefabOverrides(node)}
+            title="Instance'ı prefab varsayılanına döndür"
+            onClick={() => revertPrefabInstance(node.id)}
+          >
+            Varsayılana dön
+          </button>
         </div>
       )}
 

@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <title>Sample Game</title>
-    <style>html,body{margin:0;background:#202030}</style>
+    <style>
+      html,body{margin:0;background:#202030}
+      html.editor-play,html.editor-play body,html.editor-play #game{
+        width:100%;height:100%;overflow:hidden;
+      }
+    </style>
   </head>
   <body>
     <div id="game"></div>

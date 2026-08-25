@@ -1,8 +1,27 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import fs from "node:fs";
+import { pathToFileURL } from "node:url";
+import { startPlay, stopPlay } from "./playVite";
+
+app.commandLine.appendSwitch("disable-background-timer-throttling");
+app.commandLine.appendSwitch("disable-renderer-backgrounding");
+app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
 
 let win: BrowserWindow | null = null;
+let allowClose = false;
+let awaitingRenderer = false;
+
+function askRendererToClose(kind: "window" | "quit") {
+  if (!win || win.webContents.isDestroyed()) {
+    allowClose = true;
+    if (kind === "quit") app.quit();
+    return;
+  }
+  if (awaitingRenderer && kind !== "quit") return;
+  awaitingRenderer = true;
+  win.webContents.send("app:close-request", kind);
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -12,7 +31,20 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: true,
     },
+  });
+
+  win.on("close", (event) => {
+    if (allowClose) return;
+    event.preventDefault();
+    askRendererToClose("window");
+  });
+
+  win.on("closed", () => {
+    win = null;
+    awaitingRenderer = false;
+    if (process.platform === "darwin") allowClose = false;
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -24,13 +56,14 @@ function createWindow() {
     }
     win.loadURL(url);
   } else {
-    let fileUrl = `file://${path.join(__dirname, "../dist/index.html")}`;
+    const html = pathToFileURL(path.join(__dirname, "../dist/index.html"));
     if (process.env.AUTOPEN_PROJECT) {
-      fileUrl += `?autoproj=${encodeURIComponent(process.env.AUTOPEN_PROJECT)}&autoscene=${encodeURIComponent(
-        process.env.AUTOPEN_SCENE || ""
-      )}`;
+      html.search = new URLSearchParams({
+        autoproj: process.env.AUTOPEN_PROJECT,
+        autoscene: process.env.AUTOPEN_SCENE || "",
+      }).toString();
     }
-    win.loadURL(fileUrl);
+    win.loadURL(html.href);
   }
 }
 
@@ -94,6 +127,43 @@ app.whenReady().then(() => {
       return { error: String(err) };
     }
   });
+
+  ipcMain.on("app:close-allow", (_event, kind?: "window" | "quit") => {
+    allowClose = true;
+    awaitingRenderer = false;
+    if (kind === "quit" || process.platform !== "darwin") {
+      app.quit();
+      return;
+    }
+    win?.close();
+  });
+
+  ipcMain.on("app:close-cancel", () => {
+    awaitingRenderer = false;
+  });
+
+  ipcMain.handle("play:start", async (_event, projectPath: string) => {
+    return startPlay(projectPath);
+  });
+
+  ipcMain.handle("play:stop", async () => {
+    stopPlay();
+    return { ok: true };
+  });
+});
+
+app.on("before-quit", (event) => {
+  if (allowClose) {
+    stopPlay();
+    return;
+  }
+  if (!win || win.webContents.isDestroyed()) return;
+  event.preventDefault();
+  askRendererToClose("quit");
+});
+
+app.on("will-quit", () => {
+  stopPlay();
 });
 
 app.on("window-all-closed", () => {

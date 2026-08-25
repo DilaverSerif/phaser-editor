@@ -3,6 +3,28 @@ import Phaser from "phaser";
 import { EditorScene } from "../phaser/EditorScene";
 import { getActiveEditorScene, setActiveEditorScene } from "../phaser/editorController";
 
+function createEditorGame(host: HTMLElement): Phaser.Game {
+  return new Phaser.Game({
+    // P4 Canvas renderer is deprecated. Create only after the dock host has a
+    // real size so WebGL does not boot a 0x0 framebuffer.
+    type: Phaser.AUTO,
+    parent: host,
+    backgroundColor: "#1e1e2e",
+    render: {
+      antialias: false,
+      roundPixels: true,
+      powerPreference: "low-power",
+    },
+    scale: {
+      mode: Phaser.Scale.RESIZE,
+      width: host.clientWidth,
+      height: host.clientHeight,
+      autoRound: true,
+    },
+    scene: [EditorScene],
+  });
+}
+
 export function CanvasView() {
   const hostRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -10,59 +32,58 @@ export function CanvasView() {
   useEffect(() => {
     if (!hostRef.current) return;
     const host = hostRef.current;
-    const game = new Phaser.Game({
-      // Editor preview'sinde WebGL framebuffer, floating pencere layout'u
-      // ilk olusturulurken 0 boyut alabiliyor. Canvas renderer daha kararlidir;
-      // kullanicinin asil oyun renderer ayarlarini etkilemez.
-      type: Phaser.CANVAS,
-      parent: host,
-      backgroundColor: "#1e1e2e",
-      render: {
-        antialias: false,
-        roundPixels: true,
-        powerPreference: "low-power",
-      },
-      scale: {
-        mode: Phaser.Scale.RESIZE,
-        width: "100%",
-        height: "100%",
-        autoRound: true,
-      },
-      scene: [EditorScene],
-    });
-    gameRef.current = game;
     let lastW = 0;
     let lastH = 0;
+    let cancelled = false;
+
     const refresh = () => {
+      if (cancelled) return;
       const w = host.clientWidth;
       const h = host.clientHeight;
       if (w < 8 || h < 8) return;
+      if (!gameRef.current) {
+        lastW = w;
+        lastH = h;
+        const game = createEditorGame(host);
+        gameRef.current = game;
+        game.events.once("ready", () => {
+          getActiveEditorScene()?.refreshPreview();
+        });
+        return;
+      }
       if (w === lastW && h === lastH) return;
-      const firstRealSize = lastW < 8 || lastH < 8;
       lastW = w;
       lastH = h;
-      game.scale.resize(w, h);
-      if (firstRealSize) getActiveEditorScene()?.refreshPreview();
-    };
-    game.events.once("ready", () => {
+      gameRef.current.scale.resize(w, h);
       getActiveEditorScene()?.refreshPreview();
-      requestAnimationFrame(refresh);
-    });
+    };
+
     const ro = new ResizeObserver(() => refresh());
     ro.observe(host);
+    requestAnimationFrame(refresh);
     return () => {
+      cancelled = true;
       ro.disconnect();
       getActiveEditorScene()?.abortPendingTextures();
       setActiveEditorScene(null);
-      game.destroy(true);
+      gameRef.current?.destroy(true);
       gameRef.current = null;
     };
   }, []);
 
   return (
     <div className="canvas-wrap">
-      <div className="canvas-host" ref={hostRef} />
-      <div className="canvas-hint">Sürükle-bırak ile konumlandır · tıkla ile seç</div>
+      <div
+        className="canvas-host"
+        ref={hostRef}
+        onMouseDown={(event) => {
+          if (event.button === 1) event.preventDefault();
+        }}
+        onAuxClick={(event) => event.preventDefault()}
+      />
+      <div className="canvas-hint">
+        Sürükle-bırak ile konumlandır · tıkla ile seç · orta tuş ile pan
+      </div>
     </div>
   );
 }

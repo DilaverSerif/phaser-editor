@@ -69,7 +69,10 @@ function makeApi(dir: string) {
         return { error: "not found" };
       }
     },
-    writeFile: async () => ({ ok: true }),
+    writeFile: async (f: string, c: string) => {
+      fs.writeFileSync(f, c);
+      return { ok: true };
+    },
     readAsset: async () => "data:image/png;base64,AAAA",
   };
 }
@@ -344,5 +347,47 @@ describe("store (sahte proje)", () => {
     expect(saved.origin).toEqual([0.5, 1]);
     expect(saved.walkAnim).toBe("pursuer-walk");
     expect(saved.anims[0].frameRate).toBe(20);
+  });
+
+  it("applyPrefabInstance override'i prefab kokune yazar", async () => {
+    await useEditorStore.getState().openScenePath(path.join(root, "Level.scene"));
+    useEditorStore.getState().instantiatePrefab("drg", 80, 90);
+    const inst = useEditorStore
+      .getState()
+      .scenes.find((x) => x.fileName === "Level.scene")!
+      .scene.displayList.filter((n) => n.prefabId === "drg")
+      .at(-1)!;
+    useEditorStore.getState().updateNode(inst.id, { scaleX: 2, texture: { key: "hero" } });
+    await useEditorStore.getState().applyPrefabInstance(inst.id);
+    const prefab = useEditorStore.getState().prefabIndex.find((p) => p.id === "drg")!;
+    expect(prefab.scene?.displayList[0].scaleX).toBe(2);
+    expect(prefab.scene?.displayList[0].texture).toEqual({ key: "hero" });
+    const after = useEditorStore
+      .getState()
+      .scenes.find((x) => x.fileName === "Level.scene")!
+      .scene.displayList.find((n) => n.id === inst.id)!;
+    expect(after.scaleX).toBeUndefined();
+    expect(after.x).toBe(80);
+    expect(after.y).toBe(90);
+  });
+
+  it("revertPrefabInstance instance override'larini siler", async () => {
+    await useEditorStore.getState().openScenePath(path.join(root, "Level.scene"));
+    useEditorStore.getState().instantiatePrefab("drg", 10, 20);
+    const inst = useEditorStore
+      .getState()
+      .scenes.find((x) => x.fileName === "Level.scene")!
+      .scene.displayList.filter((n) => n.prefabId === "drg")
+      .at(-1)!;
+    useEditorStore.getState().updateNode(inst.id, { scaleX: 3, angle: 45 });
+    useEditorStore.getState().revertPrefabInstance(inst.id);
+    const after = useEditorStore
+      .getState()
+      .scenes.find((x) => x.fileName === "Level.scene")!
+      .scene.displayList.find((n) => n.id === inst.id)!;
+    expect(after.scaleX).toBeUndefined();
+    expect(after.angle).toBeUndefined();
+    expect(after.x).toBe(10);
+    expect(after.y).toBe(20);
   });
 });

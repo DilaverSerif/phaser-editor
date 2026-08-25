@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useEditorStore, hasDirtyScenes } from "../store/store";
-import { compileScene } from "../compiler";
-import { classNameFromFileName } from "../serialization";
+import { compileAllToProject } from "../compiler/writeProject";
 import { getActiveEditorScene } from "../phaser/editorController";
 import type { TransformTool } from "../model/transformGizmo";
+import { usePlaySession } from "../play/playSession";
+import { runPlay, stopPlay } from "../play/runPlay";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 
 export function Toolbar() {
@@ -21,6 +22,9 @@ export function Toolbar() {
   const transformTool = useEditorStore((s) => s.transformTool);
   const setTransformTool = useEditorStore((s) => s.setTransformTool);
   const [pendingProject, setPendingProject] = useState(false);
+  const [pendingPlay, setPendingPlay] = useState(false);
+  const playStatus = usePlaySession((s) => s.status);
+  const projectPath = useEditorStore((s) => s.projectPath);
 
   const active = scenes.find((scene) => scene.fileName === activeFileName);
   const canSave = !!active?.dirty || animsDirty;
@@ -47,26 +51,21 @@ export function Toolbar() {
     const api = (window as any).editor;
     const st = useEditorStore.getState();
     if (!api || !st.projectPath) return;
-    const targets = new Map<string, { fileName: string; scene: Parameters<typeof compileScene>[0] }>();
-    for (const sc of st.scenes) {
-      targets.set(sc.path, { fileName: sc.fileName, scene: sc.scene });
-    }
-    for (const prefab of st.prefabIndex) {
-      targets.set(prefab.filePath, {
-        fileName: prefab.fileName,
-        scene: prefab.scene!,
-      });
-    }
-    for (const sc of targets.values()) {
-      const cls = classNameFromFileName(sc.fileName);
-      const sub = sc.scene.sceneType === "PREFAB" ? "prefabs" : "scenes";
-      const code = compileScene(sc.scene, cls, st.prefabIndex);
-      await api.writeFile(
-        `${st.projectPath}/src/${sub}/${cls}.ts`,
-        code
-      );
-    }
+    await compileAllToProject({
+      api,
+      projectPath: st.projectPath,
+      scenes: st.scenes,
+      prefabIndex: st.prefabIndex,
+    });
     alert("Derlendi: proje/src altina yazildi.");
+  };
+
+  const handlePlay = () => {
+    if (hasDirtyScenes(useEditorStore.getState())) {
+      setPendingPlay(true);
+      return;
+    }
+    void runPlay();
   };
 
   return (
@@ -90,7 +89,21 @@ export function Toolbar() {
       >
         Kaydedilene dön
       </button>
-      <button className="btn" disabled={!scenes.length} onClick={handleCompile}>Derle (TS)</button>
+      <button className="btn" disabled={!scenes.length} onClick={() => void handleCompile()}>Derle (TS)</button>
+      <button
+        className="btn"
+        disabled={!projectPath || playStatus === "starting"}
+        onClick={() => void handlePlay()}
+      >
+        Oyna
+      </button>
+      <button
+        className="btn"
+        disabled={playStatus === "idle"}
+        onClick={() => void stopPlay()}
+      >
+        Durdur
+      </button>
       <div className="tool-group" role="group" aria-label="Transform">
         {TOOL_BUTTONS.map((item) => (
           <button
@@ -126,6 +139,21 @@ export function Toolbar() {
             await pickProject();
           }}
           onCancel={() => setPendingProject(false)}
+        />
+      )}
+      {pendingPlay && (
+        <UnsavedChangesDialog
+          message="Kaydedilmemiş değişiklikler var. Oynamadan önce kaydedilsin mi?"
+          onSave={async () => {
+            setPendingPlay(false);
+            await saveAllDirtyScenes();
+            await runPlay();
+          }}
+          onDiscard={async () => {
+            setPendingPlay(false);
+            await runPlay();
+          }}
+          onCancel={() => setPendingPlay(false)}
         />
       )}
     </div>

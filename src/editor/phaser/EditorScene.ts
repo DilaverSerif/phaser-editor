@@ -3,7 +3,7 @@ import { GameObjectNode, SceneFile, textureKeyOf } from "../model/types";
 import { collectNodeIds } from "../model/sceneTree";
 import { useEditorStore } from "../store/store";
 import { missingTexturePlaceholderSize } from "../store/sceneAssets";
-import { focusCenter, focusZoomForBounds } from "./cameraFocus";
+import { focusCenter, focusZoomForBounds, unionBounds } from "./cameraFocus";
 import { setActiveEditorScene } from "./editorController";
 import { ignoreOverlayMouseDown } from "./overlayInput";
 import { canAcceptTexture, keysNeedingHydration } from "./textureHydrate";
@@ -37,6 +37,10 @@ interface Tagged extends GO {
   __visualSig?: string;
 }
 
+function isMiddlePointer(pointer: Phaser.Input.Pointer): boolean {
+  return pointer.button === 1 || pointer.middleButtonDown();
+}
+
 function isContainerLike(node: GameObjectNode): boolean {
   return node.type === "Container" || node.type === "Layer";
 }
@@ -57,6 +61,7 @@ export class EditorScene extends Phaser.Scene {
   private pan:
     | { startClientX: number; startClientY: number; scrollX: number; scrollY: number }
     | null = null;
+  private pendingPrefabFocus = false;
 
   constructor() {
     super("Editor");
@@ -81,6 +86,10 @@ export class EditorScene extends Phaser.Scene {
     this.drawGrid();
 
     this.unsub = useEditorStore.subscribe((state, prev) => {
+      if (state.activeFileName !== prev.activeFileName) {
+        const opened = state.scenes.find((item) => item.fileName === state.activeFileName);
+        this.pendingPrefabFocus = opened?.scene.sceneType === "PREFAB";
+      }
       if (state.assets !== prev.assets) this.hydrateTextures();
       // Zoom / transform araci tek basina sahneyi yeniden kurmamali.
       const overlayOnly =
@@ -150,6 +159,10 @@ export class EditorScene extends Phaser.Scene {
     this.input.on(
       "pointerdown",
       (pointer: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+        if (isMiddlePointer(pointer)) {
+          this.beginPan(pointer);
+          return;
+        }
         if (over.some((obj) => isGizmoObject(obj))) return;
         if (over.length === 0) useEditorStore.getState().selectNode(null);
         if (useEditorStore.getState().transformTool === "pan") {
@@ -162,10 +175,13 @@ export class EditorScene extends Phaser.Scene {
       this.updatePan(pointer);
     });
     this.input.on("pointerup", () => {
+      if (this.pan) this.input.setDefaultCursor("default");
       this.pan = null;
     });
 
     this.hydrateTextures();
+    const initial = this.getActiveScene();
+    if (initial?.sceneType === "PREFAB") this.pendingPrefabFocus = true;
     this.syncScene();
     // Sahne + texture'lar create ile ayni anda gelebilir; bir kare sonra tekrar kur.
     this.queueSync();
@@ -283,6 +299,7 @@ export class EditorScene extends Phaser.Scene {
       this.rootContainer.removeAll(true);
       this.nodes.clear();
       this.selectionGfx.clear();
+      this.pendingPrefabFocus = false;
       this.refreshOverlay();
       return;
     }
@@ -361,6 +378,7 @@ export class EditorScene extends Phaser.Scene {
       }
       this.updateSelection();
       this.applyDragGate();
+      this.applyPendingPrefabFocus();
     } catch (err) {
       console.error("[EditorScene.syncScene] FATAL:", err);
     }
@@ -421,7 +439,8 @@ export class EditorScene extends Phaser.Scene {
       (tagged as any).__childIds = childIds;
       this.nodes.set(node.id, tagged);
       this.makeInteractive(go, node);
-      go.on("pointerdown", () => {
+      go.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+        if (isMiddlePointer(pointer)) return;
         useEditorStore.getState().selectNode(node.id);
       });
     }
@@ -642,6 +661,8 @@ export class EditorScene extends Phaser.Scene {
   private beginPan(pointer: Phaser.Input.Pointer) {
     const event = pointer.event as MouseEvent | undefined;
     if (!event) return;
+    event.preventDefault();
+    this.input.setDefaultCursor("grabbing");
     this.pan = {
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -662,16 +683,42 @@ export class EditorScene extends Phaser.Scene {
   }
 
   focusNode(id: string) {
-    const go = this.nodes.get(id);
-    if (!go) return;
-    const b = (go as any).getBounds
-      ? (go as Phaser.GameObjects.Container).getBounds()
-      : new Phaser.Geom.Rectangle(go.x ?? 0, go.y ?? 0, 64, 64);
-    const width = Math.max(b.width, 8);
-    const height = Math.max(b.height, 8);
+    this.focusGameObjects([id]);
+  }
+
+  private applyPendingPrefabFocus() {
+    if (!this.pendingPrefabFocus) return;
+    const scene = this.getActiveScene();
+    if (!scene || scene.sceneType !== "PREFAB") {
+      this.pendingPrefabFocus = false;
+      return;
+    }
     const cam = this.cameras.main;
-    const zoom = focusZoomForBounds(width, height, cam.width, cam.height);
-    const center = focusCenter({ x: b.x, y: b.y, width, height });
+    if (cam.width < 32 || cam.height < 32) return;
+    this.focusGameObjects(scene.displayList.map((node) => node.id));
+    if (this.hydrating.size === 0) this.pendingPrefabFocus = false;
+  }
+
+  private focusGameObjects(ids: string[]) {
+    const rects = ids.flatMap((id) => {
+      const go = this.nodes.get(id);
+      if (!go) return [];
+      const b = (go as { getBounds?: () => Phaser.Geom.Rectangle }).getBounds
+        ? (go as Phaser.GameObjects.Container).getBounds()
+        : new Phaser.Geom.Rectangle(go.x ?? 0, go.y ?? 0, 64, 64);
+      return [
+        {
+          x: b.x,
+          y: b.y,
+          width: Math.max(b.width, 8),
+          height: Math.max(b.height, 8),
+        },
+      ];
+    });
+    const cam = this.cameras.main;
+    const bounds = unionBounds(rects) ?? { x: -32, y: -32, width: 64, height: 64 };
+    const zoom = focusZoomForBounds(bounds.width, bounds.height, cam.width, cam.height);
+    const center = focusCenter(bounds);
     cam.setZoom(zoom);
     cam.centerOn(center.x, center.y);
     useEditorStore.getState().setZoom(zoom);

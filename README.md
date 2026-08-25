@@ -2,7 +2,7 @@
 
 **English** | [Türkçe](README.tr.md)
 
-Electron + React + Phaser 3 scene and prefab editor. It reads and writes Phaser Editor 2D `.scene` / `.prefab` JSON and can compile scenes to TypeScript, so the game runtime does not need official Phaser Editor 2D.
+Electron + React + Phaser 4 scene and prefab editor. It reads and writes Phaser Editor 2D `.scene` / `.prefab` JSON and can compile scenes to TypeScript, so the game runtime does not need official Phaser Editor 2D.
 
 > Custom editor. Not the official Phaser Editor product.
 
@@ -38,20 +38,23 @@ In another terminal:
 npm run electron:dev
 ```
 
+On macOS, Gatekeeper may move `Electron.app` to Trash. Run `npm run fix:electron` (also runs before `dev` / `electron:dev`). If it happens again: System Settings → Privacy & Security → Open Anyway.
+
 Vite: `http://localhost:5173`. Full file read/write only works inside Electron.
 
 ### Production
 
 ```bash
-npm run build    # dist/ + dist-electron/
-npm run dist     # electron-builder package (release/)
+./scripts/build-editor.sh   # typecheck + vite + electron-builder → release/
+npm run build               # dist/ + dist-electron/ only
+npm run dist                # same as the .sh (without install/fix)
 npm test
 npm run typecheck
 ```
 
 ## Sample game
 
-`sample-game/` is a small Phaser 3 project that consumes code produced by the editor.
+`sample-game/` is a small Phaser 4 project that consumes code produced by the editor.
 
 ```bash
 cd sample-game

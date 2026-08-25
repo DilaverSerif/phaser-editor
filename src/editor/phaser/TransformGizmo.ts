@@ -155,6 +155,7 @@ export class TransformGizmo {
     );
     tagHandle(gfx as unknown as Handle, "rotate", "xy");
     gfx.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.button === 1) return;
       this.beginDrag(pointer, "rotate", "xy");
     });
     gfx.on("pointerover", () => this.scene.input.setDefaultCursor("grab"));
@@ -194,6 +195,7 @@ export class TransformGizmo {
     zone.setInteractive();
     tagHandle(zone, kind, axis);
     zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.button === 1) return;
       this.beginDrag(pointer, kind, axis);
     });
     return zone;

@@ -268,31 +268,85 @@ export function emitHitArea(varName: string, node: GameObjectNode): string[] {
   return [`${varName}.setInteractive();`];
 }
 
+const FILTER_CTOR_KEYS: Record<Exclude<PhaserFilterType, "ColorMatrix" | "Wipe">, string[]> = {
+  Glow: ["color", "outerStrength", "innerStrength", "scale", "knockout"],
+  Shadow: ["x", "y", "decay", "power", "color", "samples", "intensity"],
+  Pixelate: ["amount"],
+  Blur: ["quality", "x", "y", "strength", "color", "steps"],
+  Barrel: ["amount"],
+  Displacement: ["texture", "x", "y"],
+  Bokeh: ["radius", "amount", "contrast"],
+  Vignette: ["x", "y", "radius", "strength", "color"],
+};
+
 export function emitFilters(varName: string, node: GameObjectNode): string[] {
   const filters = nodeFilters(node);
   if (filters.length === 0) return [];
   const lines = [`${varName}.enableFilters();`];
   for (const filter of filters) {
     const list = filter.list === "internal" ? "internal" : "external";
-    const method = `add${filter.type}`;
-    const args = filterConfigLiteral(filter);
-    lines.push(`${varName}.filters.${list}.${method}(${args});`);
+    const target = `${varName}.filters.${list}`;
+    if (filter.type === "ColorMatrix") {
+      lines.push(...emitColorMatrix(target, filter));
+      continue;
+    }
+    if (filter.type === "Wipe") {
+      lines.push(...emitWipe(target, filter));
+      continue;
+    }
+    const keys = FILTER_CTOR_KEYS[filter.type];
+    const args = keys.map((key) => filterArg(filter, key));
+    lines.push(`${target}.add${filter.type}(${args.join(", ")});`);
   }
   return lines;
 }
 
-function filterConfigLiteral(filter: PhaserFilter): string {
-  const skip = new Set(["id", "type", "label", "list"]);
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(filter)) {
-    if (skip.has(key) || value === undefined) continue;
-    if (typeof value === "string" && value.startsWith("#")) {
-      parts.push(`${key}: ${hexToPhaserColor(value)}`);
-    } else if (typeof value === "string") {
-      parts.push(`${key}: ${JSON.stringify(value)}`);
-    } else if (typeof value === "boolean" || typeof value === "number") {
-      parts.push(`${key}: ${value}`);
-    }
+function emitColorMatrix(target: string, filter: PhaserFilter): string[] {
+  const lines = [`{`, `    const f = ${target}.addColorMatrix();`];
+  const alpha = Number(filter.alpha ?? 1);
+  if (alpha !== 1) lines.push(`    f.colorMatrix.alpha = ${alpha};`);
+  const ops: Array<[string, number]> = [];
+  const brightness = Number(filter.brightness ?? 0);
+  const saturate = Number(filter.saturate ?? 0);
+  const hue = Number(filter.hueRotation ?? 0);
+  const contrast = Number(filter.contrast ?? 0);
+  if (brightness) ops.push(["brightness", brightness]);
+  if (saturate) ops.push(["saturate", saturate]);
+  if (hue) ops.push(["hue", hue]);
+  if (contrast) ops.push(["contrast", contrast]);
+  ops.forEach(([method, value], index) => {
+    const multiply = index > 0 ? ", true" : "";
+    lines.push(`    f.colorMatrix.${method}(${value}${multiply});`);
+  });
+  lines.push(`}`);
+  return lines;
+}
+
+function emitWipe(target: string, filter: PhaserFilter): string[] {
+  const args = ["wipeWidth", "direction", "axis", "reveal"].map((key) =>
+    filterArg(filter, key)
+  );
+  const progress = Number(filter.progress ?? 0);
+  if (!progress) return [`${target}.addWipe(${args.join(", ")});`];
+  return [
+    `{`,
+    `    const f = ${target}.addWipe(${args.join(", ")});`,
+    `    f.progress = ${progress};`,
+    `}`,
+  ];
+}
+
+function filterArg(filter: PhaserFilter, key: string): string {
+  if (key === "quality") return String(filter.quality ?? 0);
+  if (key === "texture") {
+    const texture = filter.texture;
+    return typeof texture === "string" && texture
+      ? JSON.stringify(texture)
+      : `"__WHITE"`;
   }
-  return parts.length ? `{ ${parts.join(", ")} }` : "";
+  const value = filter[key];
+  if (typeof value === "string" && value.startsWith("#")) return hexToPhaserColor(value);
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  return "undefined";
 }
